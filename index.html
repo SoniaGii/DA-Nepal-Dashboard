@@ -156,10 +156,47 @@
     height: calc(100vh - 210px);
     min-height: 420px;
   }
-  #map {
+  .map-wrap {
+    position: relative;
     flex: 1 1 auto;
+  }
+  #map {
+    width: 100%;
+    height: 100%;
     background: #dfe6ee;
   }
+
+  /* Province / Municipality toggle, floating on the left of the map */
+  .view-toggle {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    z-index: 500;
+    background: var(--card);
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-width: 150px;
+  }
+  .view-toggle button {
+    padding: 10px 14px;
+    border: none;
+    background: var(--card);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: var(--muted);
+    text-align: left;
+  }
+  .view-toggle button:not(:last-child) { border-bottom: 1px solid var(--line); }
+  .view-toggle button:hover { background: #f9f8f4; }
+  .view-toggle button.active { background: var(--navy); color: #fff; }
+
+  .province-tooltip ul { margin: 4px 0 0 16px; padding: 0; }
+  .province-tooltip li { margin-bottom: 2px; }
   .panel {
     width: 320px;
     flex: 0 0 320px;
@@ -267,13 +304,20 @@
   <span class="item"><span class="swatch" style="background:var(--un-women)"></span>UN Women</span>
   <span class="item"><span class="swatch" style="background:var(--geep)"></span>GEEP</span>
   <span style="margin-left:16px;">Faded marker = Canceled</span>
+  <span style="margin-left:16px;">In Province view, darker shading = more activities</span>
 </div>
 
 <div class="main">
-  <div id="map"></div>
+  <div class="map-wrap">
+    <div id="map"></div>
+    <div class="view-toggle" id="viewToggle">
+      <button data-mode="province" class="active">Province view</button>
+      <button data-mode="municipality">Municipality view</button>
+    </div>
+  </div>
   <div class="panel" id="panel">
     <h2>Details</h2>
-    <p class="hint">Click a marker on the map to see its details here. Use the filters above to narrow down what's shown on the map.</p>
+    <p class="hint">In <strong>Province view</strong>, hover a province to see its municipalities, or click it to zoom in. In <strong>Municipality view</strong>, click any dot to see its details here.</p>
   </div>
 </div>
 
@@ -285,18 +329,21 @@
 const PROJECT_COLORS = { "UN Women": "#0f8b8d", "GEEP": "#d97f2c" };
 
 let allActivities = [];  // merged activities + coordinates
-let map, markersLayer, districtLayer;
+let map, markersLayer, districtLayer, provinceLayer;
+let viewMode = 'province';
 
 async function loadData() {
-  const [activitiesRes, municipalitiesRes, topoRes] = await Promise.all([
+  const [activitiesRes, municipalitiesRes, topoRes, provinceTopoRes] = await Promise.all([
     fetch('data/activities.json'),
     fetch('data/municipalities.json'),
-    fetch('data/nepal-districts.topojson')
+    fetch('data/nepal-districts.topojson'),
+    fetch('data/nepal-provinces.topojson')
   ]);
 
   const activities = await activitiesRes.json();
   const municipalities = await municipalitiesRes.json();
   const topo = await topoRes.json();
+  const provinceTopo = await provinceTopoRes.json();
 
   const coordsBySlug = {};
   municipalities.forEach(m => { coordsBySlug[m.slug] = m; });
@@ -306,12 +353,13 @@ async function loadData() {
     return { ...a, lat: coord.lat, lng: coord.lng };
   });
 
-  initMap(topo);
+  initMap(topo, provinceTopo);
   populateFilterOptions();
   applyFilters();
+  setViewMode('province');
 }
 
-function initMap(topo) {
+function initMap(topo, provinceTopo) {
   map = L.map('map', { zoomControl: true }).setView([28.3, 83.9], 7);
 
   L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
@@ -319,15 +367,104 @@ function initMap(topo) {
     maxZoom: 18
   }).addTo(map);
 
-  // Convert the topojson district file into normal map shapes
+  // Convert the topojson district file into normal map shapes (used as context in Municipality view)
   const objectName = Object.keys(topo.objects)[0];
   const districtGeoJSON = topojson.feature(topo, topo.objects[objectName]);
-
   districtLayer = L.geoJSON(districtGeoJSON, {
     style: { color: '#9aa7bb', weight: 1, fillColor: '#dfe6ee', fillOpacity: 0.25 }
-  }).addTo(map);
+  });
 
-  markersLayer = L.layerGroup().addTo(map);
+  markersLayer = L.layerGroup();
+
+  buildProvinceLayer(provinceTopo);
+
+  document.querySelectorAll('#viewToggle button').forEach(btn => {
+    btn.addEventListener('click', () => setViewMode(btn.dataset.mode));
+  });
+}
+
+function provinceStats(provinceName) {
+  const rows = allActivities.filter(a => a.province === provinceName);
+  const municipalityMap = {};
+  rows.forEach(a => { municipalityMap[a.slug] = a; });
+  return {
+    count: rows.length,
+    municipalities: Object.values(municipalityMap)
+  };
+}
+
+function colorForCount(count, maxCount) {
+  if (!count) return '#e9e7e0';
+  const ratio = Math.min(count / maxCount, 1);
+  const start = { r: 190, g: 214, b: 225 };
+  const end = { r: 15, g: 45, b: 74 };
+  const r = Math.round(start.r + (end.r - start.r) * ratio);
+  const g = Math.round(start.g + (end.g - start.g) * ratio);
+  const b = Math.round(start.b + (end.b - start.b) * ratio);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+function buildProvinceLayer(provinceTopo) {
+  const objectName = Object.keys(provinceTopo.objects)[0];
+  const provinceGeoJSON = topojson.feature(provinceTopo, provinceTopo.objects[objectName]);
+
+  const counts = provinceGeoJSON.features.map(f => provinceStats(f.properties.PR_NAME.replace(' Province', '')).count);
+  const maxCount = Math.max(1, ...counts);
+
+  provinceLayer = L.geoJSON(provinceGeoJSON, {
+    style: feature => {
+      const name = feature.properties.PR_NAME.replace(' Province', '');
+      const stats = provinceStats(name);
+      return {
+        color: '#7c8aa0',
+        weight: 1.5,
+        fillColor: colorForCount(stats.count, maxCount),
+        fillOpacity: 0.75
+      };
+    },
+    onEachFeature: (feature, layer) => {
+      const name = feature.properties.PR_NAME.replace(' Province', '');
+      const stats = provinceStats(name);
+
+      const listHtml = stats.municipalities.length
+        ? `<ul>${stats.municipalities.map(m => `<li>${m.municipality} — ${m.project}</li>`).join('')}</ul>`
+        : `<div style="margin-top:4px;color:var(--muted)">No recorded activities yet</div>`;
+
+      layer.bindTooltip(
+        `<div class="province-tooltip"><strong>${name} Province</strong><br>${stats.count} activit${stats.count === 1 ? 'y' : 'ies'} · ${stats.municipalities.length} municipalit${stats.municipalities.length === 1 ? 'y' : 'ies'}${listHtml}</div>`,
+        { sticky: true, direction: 'top', opacity: 0.97 }
+      );
+
+      layer.on('mouseover', () => layer.setStyle({ weight: 3, color: '#16233a' }));
+      layer.on('mouseout', () => layer.setStyle({ weight: 1.5, color: '#7c8aa0' }));
+
+      layer.on('click', () => {
+        map.fitBounds(layer.getBounds(), { padding: [30, 30] });
+        document.getElementById('filterProvince').value = name;
+        updateDistrictOptions(name);
+        updateMunicipalityOptions(name, 'all');
+        applyFilters();
+        setViewMode('municipality');
+      });
+    }
+  });
+}
+
+function setViewMode(mode) {
+  viewMode = mode;
+  document.querySelectorAll('#viewToggle button').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+
+  if (mode === 'province') {
+    if (map.hasLayer(markersLayer)) map.removeLayer(markersLayer);
+    if (map.hasLayer(districtLayer)) map.removeLayer(districtLayer);
+    if (!map.hasLayer(provinceLayer)) provinceLayer.addTo(map);
+  } else {
+    if (map.hasLayer(provinceLayer)) map.removeLayer(provinceLayer);
+    if (!map.hasLayer(districtLayer)) districtLayer.addTo(map);
+    if (!map.hasLayer(markersLayer)) markersLayer.addTo(map);
+  }
 }
 
 function populateFilterOptions() {
