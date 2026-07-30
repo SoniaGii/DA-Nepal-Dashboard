@@ -248,6 +248,10 @@
     <select id="filterDistrict"><option value="all">All</option></select>
   </div>
   <div class="field">
+    <label>Municipality</label>
+    <select id="filterMunicipality"><option value="all">All</option></select>
+  </div>
+  <div class="field">
     <label>Status</label>
     <select id="filterStatus"><option value="all">All</option></select>
   </div>
@@ -335,13 +339,23 @@ function populateFilterOptions() {
   fillSelect('filterProvince', provinces);
   fillSelect('filterStatus', statuses);
   updateDistrictOptions('all');
+  updateMunicipalityOptions('all', 'all');
 
   document.getElementById('filterProject').addEventListener('change', applyFilters);
   document.getElementById('filterProvince').addEventListener('change', e => {
     updateDistrictOptions(e.target.value);
+    updateMunicipalityOptions(e.target.value, 'all');
     applyFilters();
   });
-  document.getElementById('filterDistrict').addEventListener('change', applyFilters);
+  document.getElementById('filterDistrict').addEventListener('change', e => {
+    const province = document.getElementById('filterProvince').value;
+    updateMunicipalityOptions(province, e.target.value);
+    applyFilters();
+  });
+  document.getElementById('filterMunicipality').addEventListener('change', () => {
+    applyFilters();
+    flyToSelectedMunicipality();
+  });
   document.getElementById('filterStatus').addEventListener('change', applyFilters);
   document.getElementById('filterSearch').addEventListener('input', applyFilters);
   document.getElementById('resetFilters').addEventListener('click', () => {
@@ -350,7 +364,9 @@ function populateFilterOptions() {
     document.getElementById('filterStatus').value = 'all';
     document.getElementById('filterSearch').value = '';
     updateDistrictOptions('all');
+    updateMunicipalityOptions('all', 'all');
     applyFilters();
+    map.setView([28.3, 83.9], 7);
   });
 }
 
@@ -381,10 +397,42 @@ function updateDistrictOptions(province) {
   el.value = 'all';
 }
 
+function updateMunicipalityOptions(province, district) {
+  const el = document.getElementById('filterMunicipality');
+  el.innerHTML = '<option value="all">All</option>';
+  const munis = [...new Set(
+    allActivities
+      .filter(a => (province === 'all' || a.province === province))
+      .filter(a => (district === 'all' || a.district === district))
+      .map(a => a.slug)
+  )];
+  munis
+    .map(slug => allActivities.find(a => a.slug === slug))
+    .sort((a, b) => a.municipality.localeCompare(b.municipality))
+    .forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.slug;
+      opt.textContent = a.municipality;
+      el.appendChild(opt);
+    });
+  el.value = 'all';
+}
+
+function flyToSelectedMunicipality() {
+  const slug = document.getElementById('filterMunicipality').value;
+  if (slug === 'all') return;
+  const a = allActivities.find(x => x.slug === slug);
+  if (a && a.lat != null && a.lng != null) {
+    map.flyTo([a.lat, a.lng], 11, { duration: 0.8 });
+    showDetail(a);
+  }
+}
+
 function getFilteredActivities() {
   const project = document.getElementById('filterProject').value;
   const province = document.getElementById('filterProvince').value;
   const district = document.getElementById('filterDistrict').value;
+  const municipality = document.getElementById('filterMunicipality').value;
   const status = document.getElementById('filterStatus').value;
   const search = document.getElementById('filterSearch').value.trim().toLowerCase();
 
@@ -392,6 +440,7 @@ function getFilteredActivities() {
     if (project !== 'all' && a.project !== project) return false;
     if (province !== 'all' && a.province !== province) return false;
     if (district !== 'all' && a.district !== district) return false;
+    if (municipality !== 'all' && a.slug !== municipality) return false;
     if (status !== 'all' && a.status !== status) return false;
     if (search && !a.municipality.toLowerCase().includes(search)) return false;
     return true;
@@ -419,6 +468,14 @@ function renderMarkers(list) {
       fillOpacity: isCanceled ? 0.35 : 0.9,
       dashArray: isCanceled ? '2,2' : null
     });
+
+    // Hover: show a small label right away, and make the dot grow slightly
+    marker.bindTooltip(
+      `<strong>${a.municipality}</strong><br>${a.project} · ${a.status}`,
+      { direction: 'top', offset: [0, -6], opacity: 0.95 }
+    );
+    marker.on('mouseover', () => marker.setStyle({ radius: 10 }));
+    marker.on('mouseout', () => marker.setStyle({ radius: 7 }));
 
     marker.on('click', () => showDetail(a));
     marker.addTo(markersLayer);
