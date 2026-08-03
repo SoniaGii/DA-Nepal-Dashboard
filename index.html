@@ -8,23 +8,27 @@
 <!-- Leaflet (the map library) -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<!-- topojson-client (converts our district boundary file into map shapes) -->
+<!-- topojson-client (converts our district/province boundary files into map shapes) -->
 <script src="https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 
 <style>
   :root {
-    --navy: #16233a;
-    --navy-light: #1f3654;
-    --paper: #f6f4ef;
+    --navy: #101b2d;
+    --navy-2: #16233a;
+    --paper: #f3f1ea;
     --card: #ffffff;
     --ink: #1c2430;
-    --muted: #647085;
+    --muted: #667088;
     --line: #e2e0d8;
-    --un-women: #0f8b8d;
-    --geep: #d97f2c;
-    --active: #2f9e56;
-    --canceled: #b0392f;
-    --radius: 10px;
+
+    --daayitwa-dark:  #1e6b3c;
+    --daayitwa-light: #a9d9b8;
+    --govlab-dark:    #1b4b8f;
+    --govlab-light:   #aecbee;
+    --multi:          #7c4fa3;
+
+    --shadow-sm: 0 1px 3px rgba(16,27,45,0.08);
+    --shadow-md: 0 4px 16px rgba(16,27,45,0.14);
   }
 
   * { box-sizing: border-box; }
@@ -39,24 +43,28 @@
   }
 
   header {
-    background: var(--navy);
+    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-2) 100%);
     color: #fff;
-    padding: 18px 24px;
+    padding: 20px 28px;
     display: flex;
     align-items: baseline;
     gap: 14px;
     flex-wrap: wrap;
+    box-shadow: var(--shadow-sm);
+    position: relative;
+    z-index: 2;
   }
   header h1 {
-    font-size: 20px;
+    font-size: 21px;
     margin: 0;
-    font-weight: 700;
-    letter-spacing: 0.2px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
   }
   header p {
     margin: 0;
     color: #b9c3d6;
     font-size: 13px;
+    letter-spacing: 0.2px;
   }
 
   /* KPI strip */
@@ -65,28 +73,35 @@
     gap: 1px;
     background: var(--line);
     flex-wrap: wrap;
+    box-shadow: var(--shadow-sm);
+    position: relative;
+    z-index: 1;
   }
   .kpi {
-    flex: 1 1 120px;
+    flex: 1 1 130px;
     background: var(--card);
-    padding: 12px 16px;
+    padding: 13px 18px;
     text-align: left;
+    border-top: 3px solid transparent;
   }
   .kpi .value {
-    font-size: 24px;
-    font-weight: 700;
+    font-size: 25px;
+    font-weight: 800;
     color: var(--navy);
     line-height: 1.1;
   }
   .kpi .label {
-    font-size: 11px;
+    font-size: 10.5px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.6px;
     color: var(--muted);
-    margin-top: 3px;
+    margin-top: 4px;
+    font-weight: 600;
   }
-  .kpi.active .value { color: var(--active); }
-  .kpi.canceled .value { color: var(--canceled); }
+  .kpi.active { border-top-color: var(--govlab-dark); }
+  .kpi.active .value { color: var(--govlab-dark); }
+  .kpi.completed { border-top-color: var(--daayitwa-dark); }
+  .kpi.completed .value { color: var(--daayitwa-dark); }
 
   /* Filter bar */
   .filters {
@@ -99,12 +114,13 @@
     border-bottom: 1px solid var(--line);
   }
   .filters label {
-    font-size: 11px;
+    font-size: 10.5px;
     text-transform: uppercase;
     color: var(--muted);
     letter-spacing: 0.5px;
     display: block;
     margin-bottom: 3px;
+    font-weight: 600;
   }
   .filters select, .filters input[type="text"] {
     padding: 7px 10px;
@@ -115,6 +131,7 @@
     color: var(--ink);
     min-width: 140px;
   }
+  .filters select:focus, .filters input:focus { outline: 2px solid var(--govlab-light); }
   .filters .field { display: flex; flex-direction: column; }
   .filters button {
     align-self: flex-end;
@@ -123,6 +140,7 @@
     background: var(--paper);
     border-radius: 6px;
     font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
     color: var(--ink);
   }
@@ -131,7 +149,7 @@
   /* Legend */
   .legend {
     display: flex;
-    gap: 16px;
+    gap: 18px;
     align-items: center;
     padding: 10px 24px;
     background: var(--card);
@@ -140,21 +158,24 @@
     color: var(--muted);
     flex-wrap: wrap;
   }
+  .legend .group { display: flex; align-items: center; gap: 10px; }
   .legend .swatch {
     display: inline-block;
-    width: 11px;
-    height: 11px;
-    border-radius: 50%;
+    width: 13px;
+    height: 13px;
+    border-radius: 3px;
     margin-right: 5px;
     vertical-align: middle;
+    border: 1px solid rgba(0,0,0,0.15);
   }
-  .legend span.item { color: var(--ink); margin-right: 4px; }
+  .legend span.item { color: var(--ink); font-weight: 500; }
+  .legend .divider { width: 1px; height: 16px; background: var(--line); }
 
   /* Main layout: map + side panel */
   .main {
     display: flex;
-    height: calc(100vh - 210px);
-    min-height: 420px;
+    height: calc(100vh - 230px);
+    min-height: 440px;
   }
   .map-wrap {
     position: relative;
@@ -163,7 +184,7 @@
   #map {
     width: 100%;
     height: 100%;
-    background: #dfe6ee;
+    background: #dde5ee;
   }
 
   /* Province / Municipality toggle, floating on the left of the map */
@@ -173,77 +194,112 @@
     left: 14px;
     z-index: 500;
     background: var(--card);
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+    border-radius: 9px;
+    box-shadow: var(--shadow-md);
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    min-width: 150px;
+    min-width: 160px;
+    border: 1px solid var(--line);
   }
   .view-toggle button {
-    padding: 10px 14px;
+    padding: 11px 15px;
     border: none;
     background: var(--card);
     cursor: pointer;
-    font-size: 12px;
+    font-size: 12.5px;
     font-weight: 700;
     letter-spacing: 0.3px;
     color: var(--muted);
     text-align: left;
+    transition: background 0.15s;
   }
   .view-toggle button:not(:last-child) { border-bottom: 1px solid var(--line); }
   .view-toggle button:hover { background: #f9f8f4; }
   .view-toggle button.active { background: var(--navy); color: #fff; }
 
-  .province-tooltip ul { margin: 4px 0 0 16px; padding: 0; }
-  .province-tooltip li { margin-bottom: 2px; }
+  .map-legend-box {
+    position: absolute;
+    bottom: 20px;
+    left: 14px;
+    z-index: 500;
+    background: var(--card);
+    border-radius: 9px;
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--line);
+    padding: 12px 14px;
+    font-size: 11.5px;
+    color: var(--ink);
+    max-width: 220px;
+  }
+  .map-legend-box .row { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+  .map-legend-box .row:first-child { margin-top: 0; }
+  .map-legend-box .swatch { width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.15); flex-shrink: 0; }
+  .map-legend-box h3 { margin: 0 0 8px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+
+  .province-tooltip ul, .muni-tooltip ul { margin: 4px 0 0 16px; padding: 0; }
+  .province-tooltip li, .muni-tooltip li { margin-bottom: 2px; }
+
   .panel {
-    width: 320px;
-    flex: 0 0 320px;
+    width: 340px;
+    flex: 0 0 340px;
     background: var(--card);
     border-left: 1px solid var(--line);
-    padding: 18px;
+    padding: 20px;
     overflow-y: auto;
   }
   .panel h2 {
-    font-size: 15px;
-    margin: 0 0 12px 0;
+    font-size: 16px;
+    margin: 0 0 4px 0;
     color: var(--navy);
+    font-weight: 800;
+  }
+  .panel .sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 14px;
   }
   .panel .hint {
     color: var(--muted);
     font-size: 13px;
-    line-height: 1.5;
+    line-height: 1.6;
+  }
+  .activity-card {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    box-shadow: var(--shadow-sm);
+  }
+  .activity-card .project-tag {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 8px;
   }
   .detail-row {
     display: flex;
     justify-content: space-between;
-    padding: 8px 0;
+    padding: 6px 0;
     border-bottom: 1px solid var(--line);
-    font-size: 13px;
+    font-size: 12.5px;
   }
+  .detail-row:last-child { border-bottom: none; }
   .detail-row .k { color: var(--muted); }
   .detail-row .v { font-weight: 600; text-align: right; }
   .badge {
     display: inline-block;
-    padding: 2px 8px;
+    padding: 2px 9px;
     border-radius: 20px;
     font-size: 11px;
     font-weight: 700;
     color: #fff;
   }
-  .badge.active { background: var(--active); }
-  .badge.canceled { background: var(--canceled); }
-
-  .muni-list-item {
-    padding: 8px 0;
-    border-bottom: 1px solid var(--line);
-    font-size: 12px;
-    cursor: pointer;
-  }
-  .muni-list-item:hover { background: #f9f8f4; }
-  .muni-list-item .name { font-weight: 600; }
-  .muni-list-item .sub { color: var(--muted); }
+  .badge.active { background: var(--govlab-dark); }
+  .badge.completed { background: var(--daayitwa-dark); }
 
   footer {
     padding: 10px 24px;
@@ -255,7 +311,7 @@
 
   @media (max-width: 800px) {
     .main { flex-direction: column; height: auto; }
-    #map { height: 420px; }
+    #map { height: 440px; }
     .panel { width: auto; flex: 1 1 auto; border-left: none; border-top: 1px solid var(--line); }
   }
 </style>
@@ -300,11 +356,17 @@
 </div>
 
 <div class="legend">
-  <strong style="color:var(--ink)">Color by Project:</strong>
-  <span class="item"><span class="swatch" style="background:var(--un-women)"></span>UN Women</span>
-  <span class="item"><span class="swatch" style="background:var(--geep)"></span>GEEP</span>
-  <span style="margin-left:16px;">Faded marker = Canceled</span>
-  <span style="margin-left:16px;">In Province view, darker shading = more activities</span>
+  <div class="group">
+    <span class="item"><span class="swatch" style="background:var(--govlab-dark)"></span>Governance Lab · Active</span>
+    <span class="item"><span class="swatch" style="background:var(--govlab-light)"></span>Governance Lab · Completed</span>
+  </div>
+  <div class="divider"></div>
+  <div class="group">
+    <span class="item"><span class="swatch" style="background:var(--daayitwa-dark)"></span>Daayitwa · Active</span>
+    <span class="item"><span class="swatch" style="background:var(--daayitwa-light)"></span>Daayitwa · Completed</span>
+  </div>
+  <div class="divider"></div>
+  <span class="item"><span class="swatch" style="background:var(--multi)"></span>Both projects present</span>
 </div>
 
 <div class="main">
@@ -314,52 +376,52 @@
       <button data-mode="province" class="active">Province view</button>
       <button data-mode="municipality">Municipality view</button>
     </div>
+    <div class="map-legend-box" id="mapLegendBox"></div>
   </div>
   <div class="panel" id="panel">
     <h2>Details</h2>
-    <p class="hint">In <strong>Province view</strong>, hover a province to see its municipalities, or click it to zoom in. In <strong>Municipality view</strong>, click any dot to see its details here.</p>
+    <p class="hint">In <strong>Province view</strong>, hover a province to see its municipalities, or click it to zoom in. In <strong>Municipality view</strong>, click any shaded municipality to see its full details here.</p>
   </div>
 </div>
 
 <footer>
-  Data source: Governance Lab Network project tracker. District boundaries: openkNOWledgenp/localboundaries (CC BY 4.0).
+  Data source: Governance Lab Network project tracker. Administrative boundaries: openkNOWledgenp/localboundaries (CC BY 4.0).
 </footer>
 
 <script>
-const PROJECT_COLORS = { "UN Women": "#0f8b8d", "GEEP": "#d97f2c" };
+// Two umbrella projects, each with its own color family.
+// "Active" uses the darker shade, "Completed" uses the lighter shade.
+const PROJECT_COLORS = {
+  "Governance Lab": { active: "#1b4b8f", completed: "#aecbee" },
+  "Daayitwa":        { active: "#1e6b3c", completed: "#a9d9b8" }
+};
+const MULTI_COLOR = "#7c4fa3"; // used when a municipality has more than one project/activity showing at once
 
-let allActivities = [];  // merged activities + coordinates
-let map, markersLayer, districtLayer, provinceLayer;
+let allActivities = [];       // flat list, one row per activity (same as before)
+let activitiesBySlug = {};    // slug -> array of activities, for the shaded municipality layer
+let map, municipalityLayer, districtLayer, provinceLayer;
 let viewMode = 'province';
 
 async function loadData() {
-  const [activitiesRes, municipalitiesRes, topoRes, provinceTopoRes] = await Promise.all([
+  const [activitiesRes, boundariesRes, districtTopoRes, provinceTopoRes] = await Promise.all([
     fetch('data/activities.json'),
-    fetch('data/municipalities.json'),
+    fetch('data/municipality-boundaries.geojson'),
     fetch('data/nepal-districts.topojson'),
     fetch('data/nepal-provinces.topojson')
   ]);
 
-  const activities = await activitiesRes.json();
-  const municipalities = await municipalitiesRes.json();
-  const topo = await topoRes.json();
+  allActivities = await activitiesRes.json();
+  const municipalityBoundaries = await boundariesRes.json();
+  const districtTopo = await districtTopoRes.json();
   const provinceTopo = await provinceTopoRes.json();
 
-  const coordsBySlug = {};
-  municipalities.forEach(m => { coordsBySlug[m.slug] = m; });
-
-  allActivities = activities.map(a => {
-    const coord = coordsBySlug[a.slug] || {};
-    return { ...a, lat: coord.lat, lng: coord.lng };
-  });
-
-  initMap(topo, provinceTopo);
+  initMap(municipalityBoundaries, districtTopo, provinceTopo);
   populateFilterOptions();
   applyFilters();
   setViewMode('province');
 }
 
-function initMap(topo, provinceTopo) {
+function initMap(municipalityBoundaries, districtTopo, provinceTopo) {
   map = L.map('map', { zoomControl: true }).setView([28.3, 83.9], 7);
 
   L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
@@ -367,15 +429,14 @@ function initMap(topo, provinceTopo) {
     maxZoom: 18
   }).addTo(map);
 
-  // Convert the topojson district file into normal map shapes (used as context in Municipality view)
-  const objectName = Object.keys(topo.objects)[0];
-  const districtGeoJSON = topojson.feature(topo, topo.objects[objectName]);
+  // District outlines: used as a subtle context layer in Municipality view
+  const objectName = Object.keys(districtTopo.objects)[0];
+  const districtGeoJSON = topojson.feature(districtTopo, districtTopo.objects[objectName]);
   districtLayer = L.geoJSON(districtGeoJSON, {
-    style: { color: '#9aa7bb', weight: 1, fillColor: '#dfe6ee', fillOpacity: 0.25 }
+    style: { color: '#9aa7bb', weight: 1, fillOpacity: 0, dashArray: '3,3' }
   });
 
-  markersLayer = L.layerGroup();
-
+  buildMunicipalityLayer(municipalityBoundaries);
   buildProvinceLayer(provinceTopo);
 
   document.querySelectorAll('#viewToggle button').forEach(btn => {
@@ -383,14 +444,87 @@ function initMap(topo, provinceTopo) {
   });
 }
 
+// ---------- Color helpers ----------
+
+function colorForActivities(activities) {
+  if (activities.length === 0) return { fill: '#e9e7e0', outline: '#c9c6ba' };
+  if (activities.length > 1) return { fill: MULTI_COLOR, outline: '#4d2e66' };
+  const a = activities[0];
+  const palette = PROJECT_COLORS[a.project] || { active: '#555', completed: '#aaa' };
+  const fill = a.status === 'Active' ? palette.active : palette.completed;
+  return { fill, outline: a.status === 'Active' ? fill : '#8a8a8a' };
+}
+
+// ---------- Municipality shape layer (replaces the old dot markers) ----------
+
+function buildMunicipalityLayer(municipalityBoundaries) {
+  municipalityLayer = L.geoJSON(municipalityBoundaries, {
+    style: feature => {
+      const slug = feature.properties.slug;
+      const activities = activitiesBySlug[slug] || [];
+      const { fill, outline } = colorForActivities(activities);
+      return {
+        color: outline,
+        weight: 1.5,
+        fillColor: fill,
+        fillOpacity: activities.length ? 0.8 : 0.15
+      };
+    },
+    onEachFeature: (feature, layer) => {
+      layer.on('mouseover', () => {
+        layer.setStyle({ weight: 3, fillOpacity: 0.95 });
+        layer.bringToFront();
+      });
+      layer.on('mouseout', () => {
+        municipalityLayer.resetStyle(layer);
+      });
+      layer.on('click', () => showMunicipalityDetail(feature.properties.slug));
+    }
+  });
+
+  rebindMunicipalityTooltips();
+}
+
+function rebindMunicipalityTooltips() {
+  municipalityLayer.eachLayer(layer => {
+    const slug = layer.feature.properties.slug;
+    const name = layer.feature.properties.municipality;
+    const activities = activitiesBySlug[slug] || [];
+
+    layer.unbindTooltip();
+    if (activities.length === 0) {
+      layer.bindTooltip(`<strong>${name}</strong><br><span style="color:#888">No activity in current filter</span>`, { sticky: true });
+    } else {
+      const rows = activities.map(a => `<li>${a.project} (${a.program}) · ${a.status}</li>`).join('');
+      layer.bindTooltip(
+        `<div class="muni-tooltip"><strong>${name}</strong><ul>${rows}</ul></div>`,
+        { sticky: true, opacity: 0.97 }
+      );
+    }
+  });
+}
+
+function refreshMunicipalityStyles() {
+  municipalityLayer.eachLayer(layer => {
+    const slug = layer.feature.properties.slug;
+    const activities = activitiesBySlug[slug] || [];
+    const { fill, outline } = colorForActivities(activities);
+    layer.setStyle({
+      color: outline,
+      fillColor: fill,
+      fillOpacity: activities.length ? 0.8 : 0.15
+    });
+  });
+  rebindMunicipalityTooltips();
+}
+
+// ---------- Province choropleth layer ----------
+
 function provinceStats(provinceName) {
   const rows = allActivities.filter(a => a.province === provinceName);
   const municipalityMap = {};
   rows.forEach(a => { municipalityMap[a.slug] = a; });
-  return {
-    count: rows.length,
-    municipalities: Object.values(municipalityMap)
-  };
+  return { count: rows.length, municipalities: Object.values(municipalityMap) };
 }
 
 function colorForCount(count, maxCount) {
@@ -407,7 +541,6 @@ function colorForCount(count, maxCount) {
 function buildProvinceLayer(provinceTopo) {
   const objectName = Object.keys(provinceTopo.objects)[0];
   const provinceGeoJSON = topojson.feature(provinceTopo, provinceTopo.objects[objectName]);
-
   const counts = provinceGeoJSON.features.map(f => provinceStats(f.properties.PR_NAME.replace(' Province', '')).count);
   const maxCount = Math.max(1, ...counts);
 
@@ -415,29 +548,22 @@ function buildProvinceLayer(provinceTopo) {
     style: feature => {
       const name = feature.properties.PR_NAME.replace(' Province', '');
       const stats = provinceStats(name);
-      return {
-        color: '#7c8aa0',
-        weight: 1.5,
-        fillColor: colorForCount(stats.count, maxCount),
-        fillOpacity: 0.75
-      };
+      return { color: '#7c8aa0', weight: 1.5, fillColor: colorForCount(stats.count, maxCount), fillOpacity: 0.75 };
     },
     onEachFeature: (feature, layer) => {
       const name = feature.properties.PR_NAME.replace(' Province', '');
       const stats = provinceStats(name);
-
       const listHtml = stats.municipalities.length
-        ? `<ul>${stats.municipalities.map(m => `<li>${m.municipality} — ${m.project}</li>`).join('')}</ul>`
-        : `<div style="margin-top:4px;color:var(--muted)">No recorded activities yet</div>`;
+        ? `<ul>${stats.municipalities.map(m => `<li>${m.municipality} — ${m.project} (${m.program})</li>`).join('')}</ul>`
+        : `<div style="margin-top:4px;color:#888">No recorded activities yet</div>`;
 
       layer.bindTooltip(
         `<div class="province-tooltip"><strong>${name} Province</strong><br>${stats.count} activit${stats.count === 1 ? 'y' : 'ies'} · ${stats.municipalities.length} municipalit${stats.municipalities.length === 1 ? 'y' : 'ies'}${listHtml}</div>`,
-        { sticky: true, direction: 'top', opacity: 0.97 }
+        { sticky: true, opacity: 0.97 }
       );
 
       layer.on('mouseover', () => layer.setStyle({ weight: 3, color: '#16233a' }));
       layer.on('mouseout', () => layer.setStyle({ weight: 1.5, color: '#7c8aa0' }));
-
       layer.on('click', () => {
         map.fitBounds(layer.getBounds(), { padding: [30, 30] });
         document.getElementById('filterProvince').value = name;
@@ -450,22 +576,46 @@ function buildProvinceLayer(provinceTopo) {
   });
 }
 
+// ---------- View mode switching ----------
+
 function setViewMode(mode) {
   viewMode = mode;
-  document.querySelectorAll('#viewToggle button').forEach(b => {
-    b.classList.toggle('active', b.dataset.mode === mode);
-  });
+  document.querySelectorAll('#viewToggle button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
 
   if (mode === 'province') {
-    if (map.hasLayer(markersLayer)) map.removeLayer(markersLayer);
+    if (map.hasLayer(municipalityLayer)) map.removeLayer(municipalityLayer);
     if (map.hasLayer(districtLayer)) map.removeLayer(districtLayer);
     if (!map.hasLayer(provinceLayer)) provinceLayer.addTo(map);
+    renderMapLegendBox('province');
   } else {
     if (map.hasLayer(provinceLayer)) map.removeLayer(provinceLayer);
     if (!map.hasLayer(districtLayer)) districtLayer.addTo(map);
-    if (!map.hasLayer(markersLayer)) markersLayer.addTo(map);
+    if (!map.hasLayer(municipalityLayer)) municipalityLayer.addTo(map);
+    renderMapLegendBox('municipality');
   }
 }
+
+function renderMapLegendBox(mode) {
+  const box = document.getElementById('mapLegendBox');
+  if (mode === 'province') {
+    box.innerHTML = `
+      <h3>Shading</h3>
+      <div class="row"><span class="swatch" style="background:#0f2d4a"></span>More activities</div>
+      <div class="row"><span class="swatch" style="background:#e9e7e0"></span>No activity yet</div>
+    `;
+  } else {
+    box.innerHTML = `
+      <h3>Shading</h3>
+      <div class="row"><span class="swatch" style="background:var(--govlab-dark, #1b4b8f)"></span>Governance Lab · Active</div>
+      <div class="row"><span class="swatch" style="background:var(--govlab-light, #aecbee)"></span>Governance Lab · Completed</div>
+      <div class="row"><span class="swatch" style="background:var(--daayitwa-dark, #1e6b3c)"></span>Daayitwa · Active</div>
+      <div class="row"><span class="swatch" style="background:var(--daayitwa-light, #a9d9b8)"></span>Daayitwa · Completed</div>
+      <div class="row"><span class="swatch" style="background:var(--multi, #7c4fa3)"></span>Both projects here</div>
+    `;
+  }
+}
+
+// ---------- Filters ----------
 
 function populateFilterOptions() {
   const projects = [...new Set(allActivities.map(a => a.project))].sort();
@@ -520,11 +670,7 @@ function fillSelect(id, values) {
 function updateDistrictOptions(province) {
   const el = document.getElementById('filterDistrict');
   el.innerHTML = '<option value="all">All</option>';
-  const districts = [...new Set(
-    allActivities
-      .filter(a => province === 'all' || a.province === province)
-      .map(a => a.district)
-  )].sort();
+  const districts = [...new Set(allActivities.filter(a => province === 'all' || a.province === province).map(a => a.district))].sort();
   districts.forEach(d => {
     const opt = document.createElement('option');
     opt.value = d;
@@ -537,13 +683,13 @@ function updateDistrictOptions(province) {
 function updateMunicipalityOptions(province, district) {
   const el = document.getElementById('filterMunicipality');
   el.innerHTML = '<option value="all">All</option>';
-  const munis = [...new Set(
+  const slugs = [...new Set(
     allActivities
       .filter(a => (province === 'all' || a.province === province))
       .filter(a => (district === 'all' || a.district === district))
       .map(a => a.slug)
   )];
-  munis
+  slugs
     .map(slug => allActivities.find(a => a.slug === slug))
     .sort((a, b) => a.municipality.localeCompare(b.municipality))
     .forEach(a => {
@@ -558,11 +704,19 @@ function updateMunicipalityOptions(province, district) {
 function flyToSelectedMunicipality() {
   const slug = document.getElementById('filterMunicipality').value;
   if (slug === 'all') return;
-  const a = allActivities.find(x => x.slug === slug);
-  if (a && a.lat != null && a.lng != null) {
-    map.flyTo([a.lat, a.lng], 11, { duration: 0.8 });
-    showDetail(a);
+  const layer = findMunicipalityLayer(slug);
+  if (layer) {
+    map.fitBounds(layer.getBounds(), { padding: [60, 60] });
+    showMunicipalityDetail(slug);
   }
+}
+
+function findMunicipalityLayer(slug) {
+  let found = null;
+  municipalityLayer.eachLayer(layer => {
+    if (layer.feature.properties.slug === slug) found = layer;
+  });
+  return found;
 }
 
 function getFilteredActivities() {
@@ -586,38 +740,18 @@ function getFilteredActivities() {
 
 function applyFilters() {
   const filtered = getFilteredActivities();
-  renderMarkers(filtered);
+
+  activitiesBySlug = {};
+  filtered.forEach(a => {
+    if (!activitiesBySlug[a.slug]) activitiesBySlug[a.slug] = [];
+    activitiesBySlug[a.slug].push(a);
+  });
+
+  refreshMunicipalityStyles();
   renderKPIs(filtered);
 }
 
-function renderMarkers(list) {
-  markersLayer.clearLayers();
-  list.forEach(a => {
-    if (a.lat == null || a.lng == null) return;
-    const color = PROJECT_COLORS[a.project] || '#555';
-    const isCanceled = a.status === 'Canceled';
-
-    const marker = L.circleMarker([a.lat, a.lng], {
-      radius: 7,
-      fillColor: color,
-      color: isCanceled ? '#999' : '#1c2430',
-      weight: isCanceled ? 1 : 1.5,
-      fillOpacity: isCanceled ? 0.35 : 0.9,
-      dashArray: isCanceled ? '2,2' : null
-    });
-
-    // Hover: show a small label right away, and make the dot grow slightly
-    marker.bindTooltip(
-      `<strong>${a.municipality}</strong><br>${a.project} · ${a.status}`,
-      { direction: 'top', offset: [0, -6], opacity: 0.95 }
-    );
-    marker.on('mouseover', () => marker.setStyle({ radius: 10 }));
-    marker.on('mouseout', () => marker.setStyle({ radius: 7 }));
-
-    marker.on('click', () => showDetail(a));
-    marker.addTo(markersLayer);
-  });
-}
+// ---------- KPIs ----------
 
 function renderKPIs(list) {
   const total = list.length;
@@ -625,7 +759,7 @@ function renderKPIs(list) {
   const districts = new Set(list.map(a => a.district)).size;
   const provinces = new Set(list.map(a => a.province)).size;
   const active = list.filter(a => a.status === 'Active').length;
-  const canceled = list.filter(a => a.status === 'Canceled').length;
+  const completed = list.filter(a => a.status === 'Completed').length;
 
   const kpis = [
     { label: 'Activities', value: total },
@@ -633,7 +767,7 @@ function renderKPIs(list) {
     { label: 'Districts', value: districts },
     { label: 'Provinces', value: provinces },
     { label: 'Active', value: active, cls: 'active' },
-    { label: 'Canceled', value: canceled, cls: 'canceled' },
+    { label: 'Completed', value: completed, cls: 'completed' },
   ];
 
   const strip = document.getElementById('kpiStrip');
@@ -646,16 +780,35 @@ function renderKPIs(list) {
   });
 }
 
-function showDetail(a) {
+// ---------- Detail panel ----------
+
+function showMunicipalityDetail(slug) {
+  const activities = activitiesBySlug[slug] || allActivities.filter(a => a.slug === slug);
   const panel = document.getElementById('panel');
-  const badgeClass = a.status === 'Active' ? 'active' : 'canceled';
+  if (!activities.length) {
+    panel.innerHTML = `<h2>No activity</h2><p class="hint">This municipality has no activity matching the current filters.</p>`;
+    return;
+  }
+  const name = activities[0].municipality;
+  const district = activities[0].district;
+  const province = activities[0].province;
+
   panel.innerHTML = `
-    <h2>${a.municipality}</h2>
-    <div class="detail-row"><span class="k">Project</span><span class="v">${a.project}</span></div>
-    <div class="detail-row"><span class="k">Province</span><span class="v">${a.province}</span></div>
-    <div class="detail-row"><span class="k">District</span><span class="v">${a.district}</span></div>
-    <div class="detail-row"><span class="k">Local Level Type</span><span class="v">${a.localLevel}</span></div>
-    <div class="detail-row"><span class="k">Status</span><span class="v"><span class="badge ${badgeClass}">${a.status}</span></span></div>
+    <h2>${name}</h2>
+    <div class="sub">${district} District · ${province} Province</div>
+    ${activities.map(a => {
+      const palette = PROJECT_COLORS[a.project] || { active: '#555', completed: '#aaa' };
+      const tagColor = a.status === 'Active' ? palette.active : palette.completed;
+      const badgeClass = a.status === 'Active' ? 'active' : 'completed';
+      return `
+        <div class="activity-card">
+          <span class="project-tag" style="background:${tagColor}">${a.project}</span>
+          <div class="detail-row"><span class="k">Partner / Program</span><span class="v">${a.program}</span></div>
+          <div class="detail-row"><span class="k">Local Level Type</span><span class="v">${a.localLevel}</span></div>
+          <div class="detail-row"><span class="k">Status</span><span class="v"><span class="badge ${badgeClass}">${a.status}</span></span></div>
+        </div>
+      `;
+    }).join('')}
   `;
 }
 
