@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Daayitwa Abhiyan Network — Nepal Dashboard</title>
+<title>Governance Lab Network — Nepal Dashboard</title>
 
 <!-- Leaflet (the map library) -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -240,6 +240,20 @@
   .province-tooltip ul, .muni-tooltip ul { margin: 4px 0 0 16px; padding: 0; }
   .province-tooltip li, .muni-tooltip li { margin-bottom: 2px; }
 
+  .leaflet-tooltip.district-label {
+    background: none;
+    border: none;
+    box-shadow: none;
+    font-size: 11px;
+    font-weight: 700;
+    color: #3a4a63;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    text-shadow: 0 1px 2px rgba(255,255,255,0.9), 0 -1px 2px rgba(255,255,255,0.9), 1px 0 2px rgba(255,255,255,0.9), -1px 0 2px rgba(255,255,255,0.9);
+    pointer-events: none;
+  }
+  .leaflet-tooltip.district-label::before { display: none; }
+
   .panel {
     width: 340px;
     flex: 0 0 340px;
@@ -290,6 +304,21 @@
   .detail-row:last-child { border-bottom: none; }
   .detail-row .k { color: var(--muted); }
   .detail-row .v { font-weight: 600; text-align: right; }
+  .detail-block {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 12.5px;
+  }
+  .detail-block .k {
+    display: block;
+    color: var(--muted);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-weight: 600;
+    margin-bottom: 3px;
+  }
+  .detail-block .v { font-weight: 600; line-height: 1.4; }
   .badge {
     display: inline-block;
     padding: 2px 9px;
@@ -397,6 +426,10 @@ const PROJECT_COLORS = {
 };
 const MULTI_COLOR = "#7c4fa3"; // used when a municipality has more than one project/activity showing at once
 
+function titleCase(str) {
+  return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+
 let allActivities = [];       // flat list, one row per activity (same as before)
 let activitiesBySlug = {};    // slug -> array of activities, for the shaded municipality layer
 let map, municipalityLayer, districtLayer, provinceLayer;
@@ -429,11 +462,20 @@ function initMap(municipalityBoundaries, districtTopo, provinceTopo) {
     maxZoom: 18
   }).addTo(map);
 
-  // District outlines: used as a subtle context layer in Municipality view
+  // District outlines: used as a subtle context layer in Municipality view, with a permanent name label
   const objectName = Object.keys(districtTopo.objects)[0];
   const districtGeoJSON = topojson.feature(districtTopo, districtTopo.objects[objectName]);
   districtLayer = L.geoJSON(districtGeoJSON, {
-    style: { color: '#5c6b85', weight: 1.3, fillOpacity: 0, dashArray: '4,3' }
+    style: { color: '#5c6b85', weight: 1.3, fillOpacity: 0, dashArray: '4,3' },
+    onEachFeature: (feature, layer) => {
+      const name = titleCase(feature.properties.DISTRICT || '');
+      layer.bindTooltip(name, {
+        permanent: true,
+        direction: 'center',
+        className: 'district-label',
+        opacity: 0.85
+      });
+    }
   });
 
   buildMunicipalityLayer(municipalityBoundaries);
@@ -478,7 +520,10 @@ function buildMunicipalityLayer(municipalityBoundaries) {
       layer.on('mouseout', () => {
         municipalityLayer.resetStyle(layer);
       });
-      layer.on('click', () => showMunicipalityDetail(feature.properties.slug));
+      layer.on('click', () => {
+        map.fitBounds(layer.getBounds(), { padding: [80, 80], maxZoom: 12 });
+        showMunicipalityDetail(feature.properties.slug);
+      });
     }
   });
 
@@ -495,7 +540,7 @@ function rebindMunicipalityTooltips() {
     if (activities.length === 0) {
       layer.bindTooltip(`<strong>${name}</strong><br><span style="color:#888">No activity in current filter</span>`, { sticky: true });
     } else {
-      const rows = activities.map(a => `<li>${a.project} (${a.program}) · ${a.status}</li>`).join('');
+      const rows = activities.map(a => `<li>${a.project} · ${a.status}</li>`).join('');
       layer.bindTooltip(
         `<div class="muni-tooltip"><strong>${name}</strong><ul>${rows}</ul></div>`,
         { sticky: true, opacity: 0.97 }
@@ -563,7 +608,8 @@ function showProvinceDetail(name) {
           <span class="project-tag" style="background:${tagColor}">${a.project}</span>
           <div class="detail-row"><span class="k">Municipality</span><span class="v">${a.municipality}</span></div>
           <div class="detail-row"><span class="k">District</span><span class="v">${a.district}</span></div>
-          <div class="detail-row"><span class="k">Partner / Program</span><span class="v">${a.program}</span></div>
+          <div class="detail-block"><span class="k">Program</span><span class="v">${a.program}</span></div>
+          <div class="detail-block"><span class="k">Partners</span><span class="v">${a.partners}</span></div>
           <div class="detail-row"><span class="k">Status</span><span class="v"><span class="badge ${badgeClass}">${a.status}</span></span></div>
         </div>
       `;
@@ -587,7 +633,7 @@ function buildProvinceLayer(provinceTopo) {
       const name = feature.properties.PR_NAME.replace(' Province', '');
       const stats = provinceStats(name);
       const listHtml = stats.municipalities.length
-        ? `<ul>${stats.municipalities.map(m => `<li>${m.municipality} — ${m.project} (${m.program})</li>`).join('')}</ul>`
+        ? `<ul>${stats.municipalities.map(m => `<li>${m.municipality} — ${m.project} · ${m.status}</li>`).join('')}</ul>`
         : `<div style="margin-top:4px;color:#888">No recorded activities yet</div>`;
 
       layer.bindTooltip(
@@ -837,7 +883,8 @@ function showMunicipalityDetail(slug) {
       return `
         <div class="activity-card">
           <span class="project-tag" style="background:${tagColor}">${a.project}</span>
-          <div class="detail-row"><span class="k">Partner / Program</span><span class="v">${a.program}</span></div>
+          <div class="detail-block"><span class="k">Program</span><span class="v">${a.program}</span></div>
+          <div class="detail-block"><span class="k">Partners</span><span class="v">${a.partners}</span></div>
           <div class="detail-row"><span class="k">Local Level Type</span><span class="v">${a.localLevel}</span></div>
           <div class="detail-row"><span class="k">Status</span><span class="v"><span class="badge ${badgeClass}">${a.status}</span></span></div>
         </div>
