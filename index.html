@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Governance Lab Network — Nepal Dashboard</title>
+<title>Daayitwa Abhiyan Network — Nepal Dashboard</title>
 
 <!-- Leaflet (the map library) -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -433,7 +433,7 @@ function initMap(municipalityBoundaries, districtTopo, provinceTopo) {
   const objectName = Object.keys(districtTopo.objects)[0];
   const districtGeoJSON = topojson.feature(districtTopo, districtTopo.objects[objectName]);
   districtLayer = L.geoJSON(districtGeoJSON, {
-    style: { color: '#9aa7bb', weight: 1, fillOpacity: 0, dashArray: '3,3' }
+    style: { color: '#5c6b85', weight: 1.3, fillOpacity: 0, dashArray: '4,3' }
   });
 
   buildMunicipalityLayer(municipalityBoundaries);
@@ -447,12 +447,12 @@ function initMap(municipalityBoundaries, districtTopo, provinceTopo) {
 // ---------- Color helpers ----------
 
 function colorForActivities(activities) {
-  if (activities.length === 0) return { fill: '#e9e7e0', outline: '#c9c6ba' };
-  if (activities.length > 1) return { fill: MULTI_COLOR, outline: '#4d2e66' };
+  if (activities.length === 0) return { fill: '#e9e7e0', outline: '#b6b2a4' };
+  if (activities.length > 1) return { fill: MULTI_COLOR, outline: '#3a2450' };
   const a = activities[0];
   const palette = PROJECT_COLORS[a.project] || { active: '#555', completed: '#aaa' };
   const fill = a.status === 'Active' ? palette.active : palette.completed;
-  return { fill, outline: a.status === 'Active' ? fill : '#8a8a8a' };
+  return { fill, outline: '#182233' };
 }
 
 // ---------- Municipality shape layer (replaces the old dot markers) ----------
@@ -465,14 +465,14 @@ function buildMunicipalityLayer(municipalityBoundaries) {
       const { fill, outline } = colorForActivities(activities);
       return {
         color: outline,
-        weight: 1.5,
+        weight: 2,
         fillColor: fill,
-        fillOpacity: activities.length ? 0.8 : 0.15
+        fillOpacity: activities.length ? 0.85 : 0.15
       };
     },
     onEachFeature: (feature, layer) => {
       layer.on('mouseover', () => {
-        layer.setStyle({ weight: 3, fillOpacity: 0.95 });
+        layer.setStyle({ weight: 4, fillOpacity: 0.95, color: '#0b0f17' });
         layer.bringToFront();
       });
       layer.on('mouseout', () => {
@@ -511,8 +511,9 @@ function refreshMunicipalityStyles() {
     const { fill, outline } = colorForActivities(activities);
     layer.setStyle({
       color: outline,
+      weight: 2,
       fillColor: fill,
-      fillOpacity: activities.length ? 0.8 : 0.15
+      fillOpacity: activities.length ? 0.85 : 0.15
     });
   });
   rebindMunicipalityTooltips();
@@ -580,7 +581,7 @@ function buildProvinceLayer(provinceTopo) {
     style: feature => {
       const name = feature.properties.PR_NAME.replace(' Province', '');
       const stats = provinceStats(name);
-      return { color: '#7c8aa0', weight: 1.5, fillColor: colorForCount(stats.count, maxCount), fillOpacity: 0.75 };
+      return { color: '#33445e', weight: 2, fillColor: colorForCount(stats.count, maxCount), fillOpacity: 0.75 };
     },
     onEachFeature: (feature, layer) => {
       const name = feature.properties.PR_NAME.replace(' Province', '');
@@ -594,8 +595,8 @@ function buildProvinceLayer(provinceTopo) {
         { sticky: true, opacity: 0.97 }
       );
 
-      layer.on('mouseover', () => layer.setStyle({ weight: 3, color: '#16233a' }));
-      layer.on('mouseout', () => layer.setStyle({ weight: 1.5, color: '#7c8aa0' }));
+      layer.on('mouseover', () => layer.setStyle({ weight: 4, color: '#0b0f17' }));
+      layer.on('mouseout', () => layer.setStyle({ weight: 2, color: '#33445e' }));
       layer.on('click', () => {
         map.fitBounds(layer.getBounds(), { padding: [30, 30] });
         showProvinceDetail(name);
