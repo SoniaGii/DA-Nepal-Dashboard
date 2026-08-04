@@ -538,6 +538,38 @@ function colorForCount(count, maxCount) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
+function showProvinceDetail(name) {
+  const stats = provinceStats(name);
+  const panel = document.getElementById('panel');
+
+  if (!stats.municipalities.length) {
+    panel.innerHTML = `
+      <h2>${name} Province</h2>
+      <p class="hint">No recorded activities yet in this province.</p>
+    `;
+    return;
+  }
+
+  panel.innerHTML = `
+    <h2>${name} Province</h2>
+    <div class="sub">${stats.count} activit${stats.count === 1 ? 'y' : 'ies'} · ${stats.municipalities.length} municipalit${stats.municipalities.length === 1 ? 'y' : 'ies'}</div>
+    ${stats.municipalities.map(a => {
+      const palette = PROJECT_COLORS[a.project] || { active: '#555', completed: '#aaa' };
+      const tagColor = a.status === 'Active' ? palette.active : palette.completed;
+      const badgeClass = a.status === 'Active' ? 'active' : 'completed';
+      return `
+        <div class="activity-card">
+          <span class="project-tag" style="background:${tagColor}">${a.project}</span>
+          <div class="detail-row"><span class="k">Municipality</span><span class="v">${a.municipality}</span></div>
+          <div class="detail-row"><span class="k">District</span><span class="v">${a.district}</span></div>
+          <div class="detail-row"><span class="k">Partner / Program</span><span class="v">${a.program}</span></div>
+          <div class="detail-row"><span class="k">Status</span><span class="v"><span class="badge ${badgeClass}">${a.status}</span></span></div>
+        </div>
+      `;
+    }).join('')}
+  `;
+}
+
 function buildProvinceLayer(provinceTopo) {
   const objectName = Object.keys(provinceTopo.objects)[0];
   const provinceGeoJSON = topojson.feature(provinceTopo, provinceTopo.objects[objectName]);
@@ -566,6 +598,7 @@ function buildProvinceLayer(provinceTopo) {
       layer.on('mouseout', () => layer.setStyle({ weight: 1.5, color: '#7c8aa0' }));
       layer.on('click', () => {
         map.fitBounds(layer.getBounds(), { padding: [30, 30] });
+        showProvinceDetail(name);
         document.getElementById('filterProvince').value = name;
         updateDistrictOptions(name);
         updateMunicipalityOptions(name, 'all');
