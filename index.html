@@ -330,6 +330,38 @@
   .badge.active { background: var(--govlab-dark); }
   .badge.completed { background: var(--daayitwa-dark); }
 
+  .partner-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    font-size: 12.5px;
+    background: var(--card);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .partner-item:hover { background: #f9f8f4; }
+  .partner-item.selected { border-color: var(--navy); background: #eef1f6; }
+  .partner-item .name { font-weight: 700; color: var(--ink); }
+  .partner-item .count { color: var(--muted); font-size: 11px; }
+  .partner-muni-list { margin: 0 0 14px 0; padding: 0; list-style: none; }
+  .partner-muni-list li {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .partner-muni-list li:hover { background: #f9f8f4; }
+  .partner-muni-list li .tag {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+  }
+
   footer {
     padding: 10px 24px;
     font-size: 11px;
@@ -404,6 +436,7 @@
     <div class="view-toggle" id="viewToggle">
       <button data-mode="province" class="active">Province view</button>
       <button data-mode="municipality">Municipality view</button>
+      <button data-mode="partners">Partners view</button>
     </div>
     <div class="map-legend-box" id="mapLegendBox"></div>
   </div>
@@ -606,10 +639,12 @@ function showProvinceDetail(name) {
       return `
         <div class="activity-card">
           <span class="project-tag" style="background:${tagColor}">${a.project}</span>
+          <div class="detail-row"><span class="k">Project</span><span class="v">${a.project}</span></div>
           <div class="detail-row"><span class="k">Municipality</span><span class="v">${a.municipality}</span></div>
           <div class="detail-row"><span class="k">District</span><span class="v">${a.district}</span></div>
           <div class="detail-block"><span class="k">Program</span><span class="v">${a.program}</span></div>
           <div class="detail-block"><span class="k">Partners</span><span class="v">${a.partners}</span></div>
+          ${a.researchInstitutions ? `<div class="detail-block"><span class="k">Research Institutions</span><span class="v">${a.researchInstitutions}</span></div>` : ''}
           <div class="detail-row"><span class="k">Status</span><span class="v"><span class="badge ${badgeClass}">${a.status}</span></span></div>
         </div>
       `;
@@ -650,15 +685,123 @@ function buildProvinceLayer(provinceTopo) {
         updateDistrictOptions(name);
         updateMunicipalityOptions(name, 'all');
         applyFilters();
-        setViewMode('municipality');
+        setViewMode('municipality', { resetPanel: false });
       });
     }
   });
 }
 
+// ---------- Partners directory ----------
+
+function parsePartnerNames(partnersString) {
+  if (!partnersString) return [];
+  return partnersString
+    .split(/[,;]/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+}
+
+function buildPartnerIndex() {
+  const index = {}; // partnerName -> Set of slugs
+  allActivities.forEach(a => {
+    parsePartnerNames(a.partners).forEach(name => {
+      if (!index[name]) index[name] = new Set();
+      index[name].add(a.slug);
+    });
+  });
+  return index;
+}
+
+function renderPartnerDirectory(selectedPartner) {
+  const panel = document.getElementById('panel');
+  const index = buildPartnerIndex();
+  const names = Object.keys(index).sort((a, b) => a.localeCompare(b));
+
+  const listHtml = names.map(name => {
+    const count = index[name].size;
+    const isSelected = name === selectedPartner;
+    return `
+      <div class="partner-item ${isSelected ? 'selected' : ''}" data-partner="${name.replace(/"/g, '&quot;')}">
+        <span class="name">${name}</span>
+        <span class="count">${count} municipalit${count === 1 ? 'y' : 'ies'}</span>
+      </div>
+    `;
+  }).join('');
+
+  let selectedHtml = '';
+  if (selectedPartner && index[selectedPartner]) {
+    const slugs = [...index[selectedPartner]];
+    const munis = slugs
+      .map(slug => allActivities.find(a => a.slug === slug))
+      .filter(Boolean)
+      .sort((a, b) => a.municipality.localeCompare(b.municipality));
+    selectedHtml = `
+      <h2 style="margin-top:18px;">${selectedPartner}</h2>
+      <div class="sub">Active in ${munis.length} municipalit${munis.length === 1 ? 'y' : 'ies'}</div>
+      <ul class="partner-muni-list">
+        ${munis.map(a => {
+          const palette = PROJECT_COLORS[a.project] || { active: '#555', completed: '#aaa' };
+          const dotColor = a.status === 'Active' ? palette.active : palette.completed;
+          return `<li data-slug="${a.slug}"><span class="tag" style="background:${dotColor}"></span>${a.municipality} — ${a.district}</li>`;
+        }).join('')}
+      </ul>
+    `;
+  }
+
+  panel.innerHTML = `
+    <h2>Partners Directory</h2>
+    <p class="hint">Click a partner to highlight where they work on the map.</p>
+    ${listHtml}
+    ${selectedHtml}
+  `;
+
+  panel.querySelectorAll('.partner-item').forEach(el => {
+    el.addEventListener('click', () => selectPartner(el.dataset.partner));
+  });
+  panel.querySelectorAll('.partner-muni-list li').forEach(el => {
+    el.addEventListener('click', () => showMunicipalityDetail(el.dataset.slug));
+  });
+}
+
+function selectPartner(partnerName) {
+  const index = buildPartnerIndex();
+  const slugs = index[partnerName] || new Set();
+  const matchedLayers = [];
+
+  municipalityLayer.eachLayer(layer => {
+    const slug = layer.feature.properties.slug;
+    if (slugs.has(slug)) {
+      layer.setStyle({ weight: 4, color: '#e0a800', fillOpacity: 0.9 });
+      layer.bringToFront();
+      matchedLayers.push(layer);
+    } else {
+      layer.setStyle({ fillOpacity: 0.08, weight: 1, color: '#c9c6ba' });
+    }
+  });
+
+  if (matchedLayers.length) {
+    const group = L.featureGroup(matchedLayers);
+    map.fitBounds(group.getBounds(), { padding: [60, 60] });
+  }
+
+  renderPartnerDirectory(partnerName);
+}
+
+function resetPartnerHighlight() {
+  refreshMunicipalityStyles();
+}
+
 // ---------- View mode switching ----------
 
-function setViewMode(mode) {
+function resetPanelHint() {
+  document.getElementById('panel').innerHTML = `
+    <h2>Details</h2>
+    <p class="hint">In <strong>Province view</strong>, hover a province to see its municipalities, or click it to zoom in. In <strong>Municipality view</strong>, click any shaded municipality to see its full details here. In <strong>Partners view</strong>, click a partner to see where they work.</p>
+  `;
+}
+
+function setViewMode(mode, options = {}) {
+  const resetPanel = options.resetPanel !== false;
   viewMode = mode;
   document.querySelectorAll('#viewToggle button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
 
@@ -667,11 +810,21 @@ function setViewMode(mode) {
     if (map.hasLayer(districtLayer)) map.removeLayer(districtLayer);
     if (!map.hasLayer(provinceLayer)) provinceLayer.addTo(map);
     renderMapLegendBox('province');
-  } else {
+    if (resetPanel) resetPanelHint();
+  } else if (mode === 'municipality') {
     if (map.hasLayer(provinceLayer)) map.removeLayer(provinceLayer);
     if (!map.hasLayer(districtLayer)) districtLayer.addTo(map);
     if (!map.hasLayer(municipalityLayer)) municipalityLayer.addTo(map);
+    resetPartnerHighlight();
     renderMapLegendBox('municipality');
+    if (resetPanel) resetPanelHint();
+  } else if (mode === 'partners') {
+    if (map.hasLayer(provinceLayer)) map.removeLayer(provinceLayer);
+    if (!map.hasLayer(districtLayer)) districtLayer.addTo(map);
+    if (!map.hasLayer(municipalityLayer)) municipalityLayer.addTo(map);
+    resetPartnerHighlight();
+    renderMapLegendBox('municipality');
+    renderPartnerDirectory(null);
   }
 }
 
@@ -883,8 +1036,10 @@ function showMunicipalityDetail(slug) {
       return `
         <div class="activity-card">
           <span class="project-tag" style="background:${tagColor}">${a.project}</span>
+          <div class="detail-row"><span class="k">Project</span><span class="v">${a.project}</span></div>
           <div class="detail-block"><span class="k">Program</span><span class="v">${a.program}</span></div>
           <div class="detail-block"><span class="k">Partners</span><span class="v">${a.partners}</span></div>
+          ${a.researchInstitutions ? `<div class="detail-block"><span class="k">Research Institutions</span><span class="v">${a.researchInstitutions}</span></div>` : ''}
           <div class="detail-row"><span class="k">Local Level Type</span><span class="v">${a.localLevel}</span></div>
           <div class="detail-row"><span class="k">Status</span><span class="v"><span class="badge ${badgeClass}">${a.status}</span></span></div>
         </div>
