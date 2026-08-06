@@ -13,23 +13,26 @@
 
 <style>
   :root {
-    --navy: #2f3520;
-    --navy-2: #4b5320;
-    --paper: #f4f1e6;
+    --navy: #4a1220;
+    --navy-2: #6b1d2e;
+    --paper: #f4efe9;
     --card: #ffffff;
-    --ink: #24270f;
-    --muted: #6b6a4f;
-    --line: #ddd8c0;
+    --ink: #2a1218;
+    --muted: #7a6266;
+    --line: #ded0d0;
     --gold: #b8860b;
 
     --daayitwa-dark:  #1e6b3c;
     --daayitwa-light: #a9d9b8;
     --govlab-dark:    #1b4b8f;
     --govlab-light:   #aecbee;
+    --ien-dark:       #5b2d82;
+    --ien-light:      #c9b3e0;
     --multi:          #7c4fa3;
+    --not-continued:  #8a7a78;
 
-    --shadow-sm: 0 1px 3px rgba(24,27,10,0.10);
-    --shadow-md: 0 4px 16px rgba(24,27,10,0.18);
+    --shadow-sm: 0 1px 3px rgba(42,18,24,0.10);
+    --shadow-md: 0 4px 16px rgba(42,18,24,0.18);
   }
 
   * { box-sizing: border-box; }
@@ -103,6 +106,8 @@
   .kpi.active .value { color: var(--govlab-dark); }
   .kpi.completed { border-top-color: var(--daayitwa-dark); }
   .kpi.completed .value { color: var(--daayitwa-dark); }
+  .kpi.not-continued { border-top-color: var(--not-continued); }
+  .kpi.not-continued .value { color: var(--not-continued); }
 
   /* Filter bar */
   .filters {
@@ -247,7 +252,7 @@
     box-shadow: none;
     font-size: 11px;
     font-weight: 700;
-    color: #5c5a34;
+    color: #6b2030;
     text-transform: uppercase;
     letter-spacing: 0.4px;
     text-shadow: 0 1px 2px rgba(255,255,255,0.9), 0 -1px 2px rgba(255,255,255,0.9), 1px 0 2px rgba(255,255,255,0.9), -1px 0 2px rgba(255,255,255,0.9);
@@ -330,6 +335,7 @@
   }
   .badge.active { background: var(--govlab-dark); }
   .badge.completed { background: var(--daayitwa-dark); }
+  .badge.not-continued { background: var(--not-continued); }
 
   .partner-item {
     display: flex;
@@ -467,16 +473,31 @@
 
 <footer>
   Data source: Daayitwa Abhiyan Network project tracker. Administrative boundaries: openkNOWledgenp/localboundaries (CC BY 4.0).
+  &nbsp;·&nbsp;<a href="#" id="showNationalPrograms" style="color:var(--navy);font-weight:700;">View nationwide research programs (Governance Lab - IEN)</a>
 </footer>
 
 <script>
 // Two umbrella projects, each with its own color family.
 // "Active" uses the darker shade, "Completed" uses the lighter shade.
 const PROJECT_COLORS = {
-  "Governance Lab": { active: "#1b4b8f", completed: "#aecbee" },
-  "Daayitwa":        { active: "#1e6b3c", completed: "#a9d9b8" }
+  "Governance Lab":     { active: "#1b4b8f", completed: "#aecbee", notContinued: "#8a7a78" },
+  "Daayitwa":           { active: "#1e6b3c", completed: "#a9d9b8", notContinued: "#8a7a78" },
+  "Governance Lab - IEN": { active: "#5b2d82", completed: "#c9b3e0", notContinued: "#8a7a78" }
 };
 const MULTI_COLOR = "#7c4fa3"; // used when a municipality has more than one project/activity showing at once
+
+function shadeForStatus(project, status) {
+  const palette = PROJECT_COLORS[project] || { active: '#555', completed: '#aaa', notContinued: '#8a7a78' };
+  if (status === 'Active') return palette.active;
+  if (status === 'Not Continued') return palette.notContinued;
+  return palette.completed;
+}
+
+function badgeClassForStatus(status) {
+  if (status === 'Active') return 'active';
+  if (status === 'Not Continued') return 'not-continued';
+  return 'completed';
+}
 
 // Brief plain-language summaries of each program, shown when an activity card is opened.
 // These are draft descriptions written from the program names — edit the text below to refine them.
@@ -501,26 +522,55 @@ function titleCase(str) {
 
 let allActivities = [];       // flat list, one row per activity (same as before)
 let activitiesBySlug = {};    // slug -> array of activities, for the shaded municipality layer
+let nationalPrograms = [];    // nationwide Governance Lab - IEN research programs (not mapped to a location)
 let map, municipalityLayer, districtLayer, provinceLayer;
 let viewMode = 'province';
 
 async function loadData() {
-  const [activitiesRes, boundariesRes, districtTopoRes, provinceTopoRes] = await Promise.all([
+  const [activitiesRes, boundariesRes, districtTopoRes, provinceTopoRes, nationalRes] = await Promise.all([
     fetch('data/activities.json'),
     fetch('data/municipality-boundaries.geojson'),
     fetch('data/nepal-districts.topojson'),
-    fetch('data/nepal-provinces.topojson')
+    fetch('data/nepal-provinces.topojson'),
+    fetch('data/national-programs.json')
   ]);
 
   allActivities = await activitiesRes.json();
   const municipalityBoundaries = await boundariesRes.json();
   const districtTopo = await districtTopoRes.json();
   const provinceTopo = await provinceTopoRes.json();
+  nationalPrograms = await nationalRes.json();
 
   initMap(municipalityBoundaries, districtTopo, provinceTopo);
   populateFilterOptions();
   applyFilters();
   setViewMode('province');
+
+  document.getElementById('showNationalPrograms').addEventListener('click', e => {
+    e.preventDefault();
+    renderNationalProgramsPanel();
+  });
+}
+
+function renderNationalProgramsPanel() {
+  const panel = document.getElementById('panel');
+  panel.innerHTML = `
+    <h2>Governance Lab - IEN</h2>
+    <p class="hint">Nationwide research programs. These aren't tied to a specific municipality, so they don't appear on the map itself.</p>
+    ${nationalPrograms.map(p => {
+      const badgeClass = badgeClassForStatus(p.status);
+      const tagColor = shadeForStatus('Governance Lab - IEN', p.status);
+      return `
+        <div class="activity-card">
+          <span class="project-tag" style="background:${tagColor}">Governance Lab - IEN</span>
+          <div class="detail-block"><span class="k">Program</span><span class="v">${p.program}</span></div>
+          <div class="detail-block" style="border-bottom:none;padding-top:0;"><span class="v" style="font-weight:400;font-style:italic;color:var(--muted);">${p.description}</span></div>
+          ${p.partners ? `<div class="detail-block"><span class="k">Partners</span><span class="v">${p.partners}</span></div>` : ''}
+          <div class="detail-row"><span class="k">Status</span><span class="v"><span class="badge ${badgeClass}">${p.status}</span></span></div>
+        </div>
+      `;
+    }).join('')}
+  `;
 }
 
 function initMap(municipalityBoundaries, districtTopo, provinceTopo) {
@@ -535,7 +585,7 @@ function initMap(municipalityBoundaries, districtTopo, provinceTopo) {
   const objectName = Object.keys(districtTopo.objects)[0];
   const districtGeoJSON = topojson.feature(districtTopo, districtTopo.objects[objectName]);
   districtLayer = L.geoJSON(districtGeoJSON, {
-    style: { color: '#8a8757', weight: 1.3, fillOpacity: 0, dashArray: '4,3' },
+    style: { color: '#9c7078', weight: 1.3, fillOpacity: 0, dashArray: '4,3' },
     onEachFeature: (feature, layer) => {
       const name = titleCase(feature.properties.DISTRICT || '');
       layer.bindTooltip(name, {
@@ -558,11 +608,10 @@ function initMap(municipalityBoundaries, districtTopo, provinceTopo) {
 // ---------- Color helpers ----------
 
 function colorForActivities(activities) {
-  if (activities.length === 0) return { fill: '#eae6d0', outline: '#c3bd94' };
+  if (activities.length === 0) return { fill: '#efe4e2', outline: '#cdb2b6' };
   if (activities.length > 1) return { fill: MULTI_COLOR, outline: '#3a2450' };
   const a = activities[0];
-  const palette = PROJECT_COLORS[a.project] || { active: '#555', completed: '#aaa' };
-  const fill = a.status === 'Active' ? palette.active : palette.completed;
+  const fill = shadeForStatus(a.project, a.status);
   return { fill, outline: '#182233' };
 }
 
@@ -583,7 +632,7 @@ function buildMunicipalityLayer(municipalityBoundaries) {
     },
     onEachFeature: (feature, layer) => {
       layer.on('mouseover', () => {
-        layer.setStyle({ weight: 4, fillOpacity: 0.95, color: '#20230f' });
+        layer.setStyle({ weight: 4, fillOpacity: 0.95, color: '#26060c' });
         layer.bringToFront();
       });
       layer.on('mouseout', () => {
@@ -645,10 +694,10 @@ function provinceStats(provinceName) {
 let provinceMaxCount = 1; // exposed so the legend box can build an accurate scale
 
 function colorForCount(count, maxCount) {
-  if (!count) return '#eae6d0';
+  if (!count) return '#efe4e2';
   const ratio = Math.min(count / maxCount, 1);
-  const start = { r: 214, g: 213, b: 160 }; // pale olive-gold
-  const end = { r: 58, g: 66, b: 26 };      // deep regal olive
+  const start = { r: 226, g: 202, b: 200 }; // pale blush
+  const end = { r: 74, g: 18, b: 32 };      // deep regal burgundy
   const r = Math.round(start.r + (end.r - start.r) * ratio);
   const g = Math.round(start.g + (end.g - start.g) * ratio);
   const b = Math.round(start.b + (end.b - start.b) * ratio);
@@ -671,9 +720,8 @@ function showProvinceDetail(name) {
     <h2>${name} Province</h2>
     <div class="sub">${stats.count} activit${stats.count === 1 ? 'y' : 'ies'} · ${stats.municipalities.length} municipalit${stats.municipalities.length === 1 ? 'y' : 'ies'}</div>
     ${stats.municipalities.map(a => {
-      const palette = PROJECT_COLORS[a.project] || { active: '#555', completed: '#aaa' };
-      const tagColor = a.status === 'Active' ? palette.active : palette.completed;
-      const badgeClass = a.status === 'Active' ? 'active' : 'completed';
+      const tagColor = shadeForStatus(a.project, a.status);
+      const badgeClass = badgeClassForStatus(a.status);
       return `
         <div class="activity-card">
           <span class="project-tag" style="background:${tagColor}">${a.project}</span>
@@ -702,7 +750,7 @@ function buildProvinceLayer(provinceTopo) {
     style: feature => {
       const name = feature.properties.PR_NAME.replace(' Province', '');
       const stats = provinceStats(name);
-      return { color: '#6b5b2f', weight: 2, fillColor: colorForCount(stats.count, maxCount), fillOpacity: 0.8 };
+      return { color: '#7a2438', weight: 2, fillColor: colorForCount(stats.count, maxCount), fillOpacity: 0.8 };
     },
     onEachFeature: (feature, layer) => {
       const name = feature.properties.PR_NAME.replace(' Province', '');
@@ -716,8 +764,8 @@ function buildProvinceLayer(provinceTopo) {
         { sticky: true, opacity: 0.97 }
       );
 
-      layer.on('mouseover', () => layer.setStyle({ weight: 4, color: '#20230f' }));
-      layer.on('mouseout', () => layer.setStyle({ weight: 2, color: '#6b5b2f' }));
+      layer.on('mouseover', () => layer.setStyle({ weight: 4, color: '#26060c' }));
+      layer.on('mouseout', () => layer.setStyle({ weight: 2, color: '#7a2438' }));
       layer.on('click', () => {
         map.fitBounds(layer.getBounds(), { padding: [30, 30] });
         showProvinceDetail(name);
@@ -804,8 +852,7 @@ function renderPartnerDirectory(selectedPartner) {
       <div class="sub">Active in ${munis.length} municipalit${munis.length === 1 ? 'y' : 'ies'}</div>
       <ul class="partner-muni-list">
         ${munis.map(a => {
-          const palette = PROJECT_COLORS[a.project] || { active: '#555', completed: '#aaa' };
-          const dotColor = a.status === 'Active' ? palette.active : palette.completed;
+          const dotColor = shadeForStatus(a.project, a.status);
           return `<li data-slug="${a.slug}"><span class="tag" style="background:${dotColor}"></span>${a.municipality} — ${a.district}</li>`;
         }).join('')}
       </ul>
@@ -1070,6 +1117,7 @@ function renderKPIs(list) {
   const provinces = new Set(list.map(a => a.province)).size;
   const active = list.filter(a => a.status === 'Active').length;
   const completed = list.filter(a => a.status === 'Completed').length;
+  const notContinued = list.filter(a => a.status === 'Not Continued').length;
 
   const kpis = [
     { label: 'Activities', value: total },
@@ -1078,6 +1126,7 @@ function renderKPIs(list) {
     { label: 'Provinces', value: provinces },
     { label: 'Active', value: active, cls: 'active' },
     { label: 'Completed', value: completed, cls: 'completed' },
+    { label: 'Not Continued', value: notContinued, cls: 'not-continued' },
   ];
 
   const strip = document.getElementById('kpiStrip');
@@ -1107,9 +1156,8 @@ function showMunicipalityDetail(slug) {
     <h2>${name}</h2>
     <div class="sub">${district} District · ${province} Province</div>
     ${activities.map(a => {
-      const palette = PROJECT_COLORS[a.project] || { active: '#555', completed: '#aaa' };
-      const tagColor = a.status === 'Active' ? palette.active : palette.completed;
-      const badgeClass = a.status === 'Active' ? 'active' : 'completed';
+      const tagColor = shadeForStatus(a.project, a.status);
+      const badgeClass = badgeClassForStatus(a.status);
       return `
         <div class="activity-card">
           <span class="project-tag" style="background:${tagColor}">${a.project}</span>
