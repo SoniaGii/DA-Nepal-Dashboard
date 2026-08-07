@@ -176,8 +176,8 @@
   }
   .legend span.item { color: var(--ink); font-weight: 500; }
   .legend .divider { width: 1px; height: 16px; background: var(--line); }
-  #showNationalProgramsBtn:hover { background: var(--ien-dark); color: #fff; }
-  #showNationalProgramsBtn:hover .swatch { background: #fff !important; }
+  .legend .group.clickable { cursor: pointer; }
+  .legend .group.clickable:hover .item { text-decoration: underline; }
 
   /* Main layout: map + side panel */
   .main {
@@ -454,13 +454,14 @@
     <span class="item"><span class="swatch" style="background:var(--daayitwa-light)"></span>Daayitwa · Completed</span>
   </div>
   <div class="divider"></div>
+  <div class="group clickable" id="showNationalProgramsGroup">
+    <span class="item"><span class="swatch" style="background:var(--ien-dark)"></span>Governance Lab - IEN · Active</span>
+    <span class="item"><span class="swatch" style="background:var(--ien-light)"></span>Governance Lab - IEN · Completed</span>
+  </div>
+  <div class="divider"></div>
   <span class="item"><span class="swatch" style="background:var(--not-continued)"></span>Not Continued</span>
   <div class="divider"></div>
   <span class="item"><span class="swatch" style="background:var(--multi)"></span>Both projects present</span>
-  <div class="divider"></div>
-  <button id="showNationalProgramsBtn" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;border:1px solid var(--ien-dark);background:var(--ien-light);color:var(--ien-dark);font-size:12px;font-weight:700;cursor:pointer;">
-    <span class="swatch" style="background:var(--ien-dark)"></span>Governance Lab - IEN — Nationwide Research
-  </button>
 </div>
 
 <div class="main">
@@ -553,7 +554,7 @@ async function loadData() {
   applyFilters();
   setViewMode('province');
 
-  document.getElementById('showNationalProgramsBtn').addEventListener('click', () => {
+  document.getElementById('showNationalProgramsGroup').addEventListener('click', () => {
     renderNationalProgramsPanel();
   });
 }
