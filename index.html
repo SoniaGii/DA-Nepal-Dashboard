@@ -1000,7 +1000,7 @@ function populateFilterOptions() {
       renderNationalProgramsPanel();
       activitiesBySlug = {};
       refreshMunicipalityStyles();
-      renderKPIs([]);
+      renderNationalKPIs(nationalPrograms);
     } else {
       applyFilters();
     }
@@ -1128,6 +1128,29 @@ function applyFilters() {
 }
 
 // ---------- KPIs ----------
+
+function renderNationalKPIs(list) {
+  const total = list.length;
+  const active = list.filter(p => p.status === 'Active').length;
+  const completed = list.filter(p => p.status === 'Completed').length;
+  const notContinued = list.filter(p => p.status === 'Not Continued').length;
+
+  const kpis = [
+    { label: 'Programs', value: total },
+    { label: 'Active', value: active, cls: 'active' },
+    { label: 'Completed', value: completed, cls: 'completed' },
+    { label: 'Not Continued', value: notContinued, cls: 'not-continued' },
+  ];
+
+  const strip = document.getElementById('kpiStrip');
+  strip.innerHTML = '';
+  kpis.forEach(k => {
+    const div = document.createElement('div');
+    div.className = 'kpi' + (k.cls ? ' ' + k.cls : '');
+    div.innerHTML = `<div class="value">${k.value}</div><div class="label">${k.label}</div>`;
+    strip.appendChild(div);
+  });
+}
 
 function renderKPIs(list) {
   const total = list.length;
