@@ -982,7 +982,9 @@ function renderMapLegendBox(mode) {
 // ---------- Filters ----------
 
 function populateFilterOptions() {
-  const projects = [...new Set(allActivities.map(a => a.project))].sort();
+  const projects = [...new Set(allActivities.map(a => a.project))];
+  projects.push('Governance Lab - IEN');
+  projects.sort();
   const provinces = [...new Set(allActivities.map(a => a.province))].sort();
   const statuses = [...new Set(allActivities.map(a => a.status))].sort();
 
@@ -992,7 +994,17 @@ function populateFilterOptions() {
   updateDistrictOptions('all');
   updateMunicipalityOptions('all', 'all');
 
-  document.getElementById('filterProject').addEventListener('change', applyFilters);
+  document.getElementById('filterProject').addEventListener('change', () => {
+    const selected = document.getElementById('filterProject').value;
+    if (selected === 'Governance Lab - IEN') {
+      renderNationalProgramsPanel();
+      activitiesBySlug = {};
+      refreshMunicipalityStyles();
+      renderKPIs([]);
+    } else {
+      applyFilters();
+    }
+  });
   document.getElementById('filterProvince').addEventListener('change', e => {
     updateDistrictOptions(e.target.value);
     updateMunicipalityOptions(e.target.value, 'all');
